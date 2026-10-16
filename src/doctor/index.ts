@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
+import { findAndroidSdk } from '../environment/sdk.js';
 
 const exec = promisify(execFile);
 export interface DoctorCheck { name: string; status: 'PASS' | 'WARNING' | 'FAIL'; detail: string }
@@ -21,8 +22,10 @@ export async function doctor(root = process.cwd()): Promise<DoctorCheck[]> {
   await probe('npm', 'npm', ['--version'], 'Install npm with Node.js.');
   await probe('pnpm', 'pnpm', ['--version'], 'Optional: install pnpm if selected by the project.');
   await probe('yarn', 'yarn', ['--version'], 'Optional: install Yarn if selected by the project.');
-  await probe('Java', 'java', ['-version'], 'Install the JDK required by the selected Capacitor/Gradle version and configure JAVA_HOME and PATH.', true);
-  const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+  const javaBinary = (name: string) => process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', `${name}${process.platform === 'win32' ? '.exe' : ''}`) : name;
+  await probe('Java', javaBinary('java'), ['-version'], 'Install the JDK required by the selected Capacitor/Gradle version and configure JAVA_HOME and PATH.', true);
+  await probe('Javac', javaBinary('javac'), ['-version'], 'Install a full JDK, not only a JRE, and configure JAVA_HOME.', true);
+  const sdk = await findAndroidSdk(root);
   try {
     if (!sdk) throw new Error('missing');
     await access(path.join(sdk, 'platforms'));
@@ -34,7 +37,7 @@ export async function doctor(root = process.cwd()): Promise<DoctorCheck[]> {
     checks.push({ name: 'Gradle', status: 'PASS', detail: 'Project Gradle wrapper found; execution and version compatibility not yet validated.' });
   } catch { await probe('Gradle', 'gradle', ['--version'], 'No project wrapper/global Gradle found. Capacitor Android will provide a Gradle wrapper; global Gradle is optional.'); }
   const require = createRequire(path.join(path.resolve(root), 'package.json'));
-  for (const name of ['@capacitor/core', '@capacitor/cli', '@capacitor/android']) {
+  for (const name of ['next', '@capacitor/core', '@capacitor/cli', '@capacitor/android']) {
     try { require.resolve(`${name}/package.json`); checks.push({ name, status: 'PASS', detail: 'Installed in project resolution path.' }); }
     catch { checks.push({ name, status: 'WARNING', detail: 'Not installed. Run next2apk init to install compatible Capacitor packages.' }); }
   }

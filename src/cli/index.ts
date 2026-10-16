@@ -5,6 +5,8 @@ import { doctor } from '../doctor/index.js';
 import { formatReport } from './format.js';
 import { initCommand } from '../commands/init.js';
 import type { InitOptions } from '../capacitor/initializer.js';
+import { buildCommand } from '../commands/build.js';
+import type { BuildOptions } from '../build/pipeline.js';
 
 const program = new Command();
 program.name('next2apk').description('Analyze and prepare Next.js projects for Android').version('0.1.0');
@@ -22,12 +24,10 @@ program.command('init [path]').description('Prepare Capacitor Android with backu
   .option('--dry-run', 'Print the complete plan without writing files or running processes')
   .option('--force', 'Back up and replace existing Capacitor configuration')
   .action(async (directory: string | undefined, options: InitOptions) => initCommand(directory ?? process.cwd(), options));
-for (const command of ['build']) {
-  program.command(`${command} [path]`).description(`Reserved for the ${command === 'init' ? 'Capacitor' : 'Android build'} increment`).action(() => {
-    console.error(`${command} is not implemented in increment 1. Run next2apk analyze [path] first. No project files were changed.`);
-    process.exitCode = 2;
-  });
-}
+program.command('build [path]').description('Build a debug APK from an initialized project')
+  .option('--dry-run', 'Print the build pipeline without executing tools or modifying files')
+  .option('--clean', 'Clean Gradle build outputs; remove only verified next2apk published artifacts')
+  .action(async (directory: string | undefined, options: BuildOptions) => buildCommand(directory ?? process.cwd(), options));
 program.command('doctor').description('Check local tool availability (not full version compatibility)').action(async () => {
   const checks = await doctor();
   for (const check of checks) console.log(`[${check.status}] ${check.name}: ${check.detail}`);

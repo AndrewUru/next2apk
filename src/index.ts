@@ -8,3 +8,9 @@ export { generateConfig, validateAppId, validateRemoteUrl } from './capacitor/co
 export type { AppConfiguration } from './capacitor/config.js';
 export type { ProcessRunner, ProcessCommand, PackageManager } from './capacitor/installer.js';
 export type { InitState } from './backup/journal.js';
+export { buildProject, BuildError } from './build/builder.js';
+export type { BuildDependencies } from './build/builder.js';
+export { planBuild } from './build/pipeline.js';
+export type { BuildOptions, BuildPlan } from './build/pipeline.js';
+export type { ArtifactMetadata } from './build/artifacts.js';
+export type { BuildCommand, BuildRunner } from './build/gradle.js';

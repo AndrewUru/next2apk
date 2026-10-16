@@ -20,10 +20,10 @@ test('CLI returns nonzero for blockers and invalid arguments', () => {
   assert.equal(run(['unknown-command']).status, 1);
   assert.equal(run(['analyze', '--unknown']).status, 1);
 });
-test('pending phases do not claim successful conversion', () => {
+test('build without init does not claim successful conversion', () => {
   for (const command of ['build']) {
     const result = run([command, fixture]);
-    assert.equal(result.status, 2); assert.match(result.stderr, /not implemented/); assert.equal(result.stdout, '');
+    assert.equal(result.status, 1); assert.match(result.stderr, /not initialized/); assert.equal(result.stdout, '');
   }
 });
 test('init dry-run prints strategy and concrete operations without executing them', () => {

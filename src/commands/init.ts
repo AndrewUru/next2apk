@@ -45,7 +45,7 @@ async function performInitCommand(directory: string, options: InitOptions): Prom
     } finally { rl.close(); }
   }
   await initializeProject(directory, options, { log: console.log });
-  console.log('\nAndroid project ready.\n\nNext step:\n\nnext2apk build\n\nAPK build is not implemented yet; no Gradle build was executed.');
+  console.log('\nAndroid project ready.\n\nNext step:\n\nnext2apk build\n\nInit did not execute a Gradle build.');
 }
 export async function initCommand(directory = process.cwd(), options: InitOptions = {}): Promise<void> {
   try { await performInitCommand(directory, options); }

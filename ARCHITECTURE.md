@@ -13,12 +13,29 @@ Configuration is never imported: that could execute arbitrary project code or re
 ## Planned increments
 
 1. **Completed foundation:** CLI, analyzer, fixtures, tests, initial doctor.
-2. **Capacitor:** reusable `capacitor/` adapter, typed initialization options (appId, appName, webDir), explicit package manager runner, version compatibility matrix. Produce an operation plan, back up existing files before edits, install matching Capacitor packages, create config, add Android and sync only after assets exist. Block unresolved analysis issues rather than silently rewriting server code.
+2. **Completed initialization:** reusable `capacitor/` planner/orchestrator, validated appId/appName, package manager runner, backups and Android add/sync. Capacitor packages are pinned together at 8.5.3 (Node >=22). Android compilation/version checks remain a later increment.
 3. **Android:** `android/` adapter for application ID, version, resources, icon/splash and explicit permissions. Validate names and paths; preserve existing native customizations. No broad permissions by default.
 4. **Build:** `build/` orchestrator validates tool versions, runs Next export, verifies assets, syncs, invokes project Gradle wrapper, finds actual debug APK and copies to `dist/android/`. Handle cancellation, failures, paths with spaces, Windows command wrappers and stale artifacts. Never report success without a newly generated artifact.
 5. **Extensions:** platform adapters for iOS/Tauri; separate signing, AAB, publishing and CI operations. UI and AI consume the same report/operation contracts. Signing secrets must not enter reports or logs.
 
-`init` and `build` currently fail explicitly with exit code 2; no installation or project modification is performed. Bare `next2apk` analyzes the current directory. `doctor` checks availability only, not a complete Capacitor/Java/SDK version matrix. Gradle wrapper is preferred over global Gradle. No Android build is claimed by this increment.
+`init` now prepares Android; only `build` remains unimplemented (exit code 2). Bare `next2apk` still analyzes the current directory. `doctor` checks availability only, not a complete Java/SDK version matrix. No Gradle build is performed.
+
+## Increment 2: initialization contracts
+
+- `capacitor/config.ts`: pure validation and config serialization; names/URLs never enter shell commands.
+- `capacitor/installer.ts`: npm/pnpm/yarn commands and injectable `ProcessRunner`; output streams directly to the terminal. Unknown/conflicting managers block execution rather than defaulting to npm. Existing TypeScript declarations are preserved; TypeScript is installed when missing because Capacitor loads a TS config.
+- `capacitor/initializer.ts`: `planInit` reads only; `initializeProject` plans again, validates blockers, acquires a lock, backs up, installs, writes config, builds web assets where appropriate, adds/syncs Android and verifies generated files. A named step and the original error are propagated on failure.
+- `project/next-config.ts`: edits property spans in plain exported object literals (ESM, CommonJS or a local const), preserving other text. Dynamic wrappers, functions, spreads and ambiguous settings are refused. Static output uses `distDir` when safely detectable, otherwise `out`; unsafe output paths are rejected. `trailingSlash` is enabled and detected next/image use gets unoptimized assets.
+- `backup/journal.ts`: copies existing project files to a unique run directory before external tools, inventories SHA-256 changes after steps and atomically updates state. Existing state revisions are backed up too. The lock prevents cooperating init processes from running concurrently.
+- `commands/init.ts`: prompts and plan presentation, with no Capacitor operations implemented inline in the CLI.
+
+STATIC and HYBRID without known server blockers run the installed Next binary's build (not arbitrary package build scripts) to produce real assets before sync. The build is the compatibility gate. HYBRID with local API routes is blocked until backend extraction; Supabase/browser integrations retain remote infrastructure requirements. REMOTE requires an explicit HTTPS deployment URL, leaves Next configuration unchanged, and creates a minimal local shell in `.next2apk/remote-web`. The shell is not a static copy or offline replacement of the app. Capacitor documents `server.url` primarily for live reload; distribution/navigation/plugin security needs separate review.
+
+Existing Capacitor configs stop initialization unless `--force` is explicit. Force backs up and replaces the TS config and archives conflicting JS/JSON configs, recording removed originals. Existing Android projects always block: regenerating them could change IDs or native customizations. Failure leaves backups and partial artifacts for inspection; there is no automatic rollback and retrying after native generation requires manual recovery.
+
+The dry-run performs no writes, process launches, network calls or prompts. It lists planned config contents, backups, dependency commands, generated locations and blockers. Missing appId uses a clearly labelled preview example; real execution requires a supplied/interactive ID. Missing manager or REMOTE URL remains a blocker. Dependency/generated filenames cannot be known before running third-party tools: the plan names their affected locations and the journal captures actual changes.
+
+Backups exclude `node_modules`, `.git` and internal `.next2apk` contents, apart from state and the remote shell that this tool overwrites. They include existing build output and may be large or contain secrets. `.next2apk/` is added to the project's `.gitignore`. Installation can execute dependency lifecycle hooks; Next build executes project code. This is not a sandbox, and arbitrary third-party effects outside the project are not recoverable through this journal. Workspace roots and symlinked project files are refused. No claims are made about restoring dependency caches, external side effects or validating all runtime navigation/authentication behavior.
 
 ## Technical risks
 

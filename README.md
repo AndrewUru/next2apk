@@ -15,7 +15,7 @@ clicks as possible.**
 [![License:
 MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
-![Tests](https://img.shields.io/badge/tests-18%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-43%20passing-brightgreen)
 ![Status](https://img.shields.io/badge/status-building%20the%20thing-orange)
 
 **If this saves you from opening Android Studio even once, you legally
@@ -127,7 +127,7 @@ bullshit.
 
 ## Current status
 
-The first increment is alive.
+The analyzer and safe Capacitor initialization increments are implemented. APK compilation is still pending.
 
 ### Working
 
@@ -148,15 +148,17 @@ The first increment is alive.
 -   package manager detection
 -   TypeScript strict
 -   test fixtures
--   **18 tests passing**
+-   **43 tests passing**
 
-### Currently being built
+### Also working: Android preparation
 
 -   `next2apk init`
 -   Capacitor integration
 -   safe project modification
 -   backups
 -   Android project generation
+
+`init` prepares and synchronizes Android. It does **not** run Gradle or generate an APK.
 
 ### Not pretending to work yet
 
@@ -214,6 +216,39 @@ node dist/cli/index.js doctor
 
 ## Example
 
+### Initialize safely
+
+```bash
+node dist/cli/index.js init ./my-app --dry-run
+node dist/cli/index.js init ./my-app --app-name "My App" --app-id com.example.myapp
+```
+
+In an interactive terminal, missing application details are requested. Without a terminal, pass `--app-id`; the display name defaults to the directory name. npm, pnpm and yarn are selected from the analyzer. If no manager is detectable, supply `--package-manager npm|pnpm|yarn`. Conflicting declarations must be resolved first.
+
+STATIC and exportable HYBRID projects get a static Next configuration, a real `next build`, Capacitor configuration and Android add/sync. A custom literal `distDir` becomes `webDir`; `out` is the default. Dynamic Next configuration is refused rather than rewritten. HYBRID with local server routes must extract its backend first. Supabase hosting/authentication remains external.
+
+REMOTE projects require a deployed HTTPS website:
+
+```bash
+node dist/cli/index.js init ./server-app --app-id com.example.remote --remote-url https://app.example.com --package-manager npm
+```
+
+REMOTE leaves Next.js unchanged and configures `server.url`; a local shell is created in `.next2apk/remote-web`. The app needs that server and a connection. Capacitor documents this URL setting primarily for live reload: review remote navigation and native plugin security before distribution.
+
+`--dry-run` prints configuration previews, commands, backups, generated paths and blockers without writing anything or running external tools. A missing ID is shown as a preview example only; unknown manager or missing remote URL blocks execution. External tools determine exact generated/dependency filenames at execution time.
+
+Existing Capacitor configuration stops init. `--force` backs it up before replacing it; conflicting JS/JSON originals are archived so Capacitor cannot load the wrong file. An existing `android/` always stops init, even with force, to preserve native customizations.
+
+Each run records `.next2apk/state.json` with version, date, strategy, configuration, created/modified/removed files, backup locations, current step and failure status. Backups live in `.next2apk/backups/<run>/`. Existing project files are backed up before external tools, excluding dependencies, Git and internal journal files (previous state and remote shell are backed up separately). `.next2apk/` is added to `.gitignore`; backups can contain secrets and large build directories.
+
+On failure the original tool output remains visible and the error identifies the step. Partial changes and backups remain for inspection; there is no automatic rollback. Package lifecycle scripts and Next build execute project code, so their arbitrary external effects are outside the backup guarantee. Workspace roots and symlinked project files are not supported in this increment.
+
+Capacitor core, CLI and Android are pinned to **8.5.3**, requiring Node >=22. TypeScript is added only if absent. Tests inject process runners and need no SDK. `next2apk build` remains a placeholder (exit 2); successful init does not certify APK compilation.
+
+Public APIs: `planInit(path, options)`, `initializeProject(path, options, {run, log})`, `validateAppId()` and `generateConfig()`. See [ARCHITECTURE.md](ARCHITECTURE.md) for module boundaries and limitations.
+
+### Analyze
+
 ``` text
 next2apk analyze ./my-app
 
@@ -226,14 +261,14 @@ Supabase         detected
 
 Compatibility
 ────────────────────────────
-Static export    warning
+Static export    FAIL
 Server Actions   2 detected
 API Routes       none
 Middleware       none
 
 Recommended strategy:
 
-HYBRID
+REMOTE
 ```
 
 The important part is that next2apk should tell you **why** your project
@@ -447,7 +482,7 @@ Future us already has enough problems.
 ``` text
 [██████████] Analyzer
 [██████████] Doctor
-[░░░░░░░░░░] Init + Capacitor
+[██████████] Init + Capacitor
 [░░░░░░░░░░] Android build
 [░░░░░░░░░░] APK output
 [░░░░░░░░░░] Signing

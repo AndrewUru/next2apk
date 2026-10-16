@@ -20,8 +20,12 @@ export async function validateSdk(root: string): Promise<string> {
   const directory = path.join(sdk, 'build-tools');
   const versions = await exists(directory) ? await readdir(directory) : [];
   const binary = process.platform === 'win32' ? 'aapt2.exe' : 'aapt2';
+  const appGradle = await readFile(path.join(root, 'android/app/build.gradle'), 'utf8');
+  const configuredTools = `${variables}\n${appGradle}`.match(/\bbuildToolsVersion\s*(?:=\s*)?['"]([\d.]+)['"]/)?.[1];
   let available = false;
-  for (const version of versions) if (await exists(path.join(directory, version, binary))) available = true;
-  if (!available) throw new Error('Android SDK build-tools (aapt2) not found. Run next2apk doctor.');
+  // Capacitor 8's AGP 8.13 template defaults to Build Tools 35.0.0.
+  const expected = configuredTools ?? '35.0.0';
+  for (const version of versions) if (version === expected && await exists(path.join(directory, version, binary))) available = true;
+  if (!available) throw new Error(`Android SDK build-tools ${expected} (aapt2) not found. Run next2apk doctor. SDK installation is not automatic.`);
   return sdk;
 }

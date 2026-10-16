@@ -99,7 +99,7 @@ export async function planBuild(input = process.cwd(), options: BuildOptions = {
     const file = report.configFiles[0]!;
     const content = await readFile(path.join(root, file), 'utf8');
     const prepared = prepareNextConfig(content, file);
-    if (prepared.webDir !== config.webDir || !/\boutput\s*:\s*['"]export['"]/.test(content)) throw new Error('Next export configuration no longer matches init webDir/output.');
+    if (prepared.webDir !== config.webDir || prepared.originalOutput !== 'export') throw new Error('Next export configuration no longer matches init webDir/output.');
   }
   const operations: BuildPlan['operations'] = [];
   if (report.strategy !== 'REMOTE') operations.push({ step: 'next', command: binaryCommand(manager, 'next', ['build']), cwd: root });

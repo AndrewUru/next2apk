@@ -1,6 +1,7 @@
 import { copyFile, lstat, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
 import { assertSafePath, exists } from '../project/files.js';
 import type { BuildPlan } from './pipeline.js';
 
@@ -95,7 +96,7 @@ export async function publishApk(plan: BuildPlan, source: string): Promise<Artif
   let copied = false;
   try {
     // Exclusive destination: never replace an untracked concurrent writer's file.
-    await copyFile(path.join(plan.root, source), target, 1);
+    await copyFile(path.join(plan.root, source), target, constants.COPYFILE_EXCL);
     copied = true;
     if (digest(await readFile(target)) !== metadata.sha256) throw new Error('APK changed during copying.');
     await writeFile(temporary, JSON.stringify(metadata, null, 2) + '\n', { flag: 'wx' });

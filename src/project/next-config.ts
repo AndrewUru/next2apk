@@ -1,6 +1,6 @@
 import ts from 'typescript';
 
-export interface NextConfigEdit { content: string; webDir: string }
+export interface NextConfigEdit { content: string; webDir: string; originalOutput?: string }
 function unwrap(node: ts.Expression): ts.Expression {
   while (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isParenthesizedExpression(node)) node = node.expression;
   return node;
@@ -54,5 +54,6 @@ export function prepareNextConfig(content?: string, file = 'next.config.mjs', un
   }
   if (additions.length) edits.push({ start: object.end - 1, end: object.end - 1, text: `${object.properties.length && !object.properties.hasTrailingComma ? ',' : ''}\n  ${additions.join(',\n  ')}\n` });
   for (const edit of edits.sort((a, b) => b.start - a.start)) content = content.slice(0, edit.start) + edit.text + content.slice(edit.end);
-  return { content, webDir };
+  const output = props.get('output')?.initializer;
+  return { content, webDir, ...(output && ts.isStringLiteral(output) ? { originalOutput: output.text } : {}) };
 }

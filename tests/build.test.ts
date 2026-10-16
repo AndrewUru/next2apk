@@ -8,7 +8,8 @@ import { gradleCommand, runGradle } from '../src/build/gradle.js';
 import { validateBuildEnvironment } from '../src/environment/build.js';
 import type { DoctorCheck } from '../src/doctor/index.js';
 import { snapshot } from '../src/project/files.js';
-import { validateSdk } from '../src/environment/sdk.js';
+import { isJdkSupported, parseGradleVersion, parseJavaMajor, findCompatibleJdk, androidStudioJdkLocations } from '../src/environment/jdk.js';
+import { validateSdk, findAndroidSdk, defaultSdkLocations } from '../src/environment/sdk.js';
 import { spawnSync } from 'node:child_process';
 
 const app = { appId: 'com.example.test', appName: 'My App', webDir: 'out' };
@@ -122,7 +123,7 @@ function goodChecks(): DoctorCheck[] {
 for (const missing of ['Java', 'Android SDK']) test(`missing ${missing} prevents a partial build`, async () => {
   await project(async root => {
     const calls: string[] = [];
-    const environment = async () => validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks().map(c => c.name === missing ? { ...c, status: 'FAIL', detail: 'not found' } : c), sdk: async () => 'mock-sdk' });
+    const environment = async () => validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks().map(c => c.name === missing ? { ...c, status: 'FAIL', detail: 'not found' } : c), sdk: async () => 'mock-sdk', env: {}, sdkDefaults: [], findJdk: async () => undefined });
     await assert.rejects(buildProject(root, {}, { environment, run: runner(calls) }), new RegExp(missing));
     assert.deepEqual(calls, []); assert.ok(!(await readdir(root)).includes('dist'));
   });
@@ -233,8 +234,81 @@ test('.env files in public assets are never synchronized or packaged', async () 
 });
 test('incompatible Java and Gradle are diagnosed before compilation', async () => {
   await project(async root => {
-    await assert.rejects(validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks().map(c => c.name === 'Java' ? { ...c, detail: 'openjdk version "25.0.3"' } : c), sdk: async () => 'mock-sdk' }), /not supported/);
+    await assert.rejects(validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks().map(c => c.name === 'Java' ? { ...c, detail: 'openjdk version "25.0.3"' } : c), sdk: async () => 'mock-sdk', env: {}, sdkDefaults: [], findJdk: async () => undefined }), /not supported/);
   });
+});
+const java25 = (c: DoctorCheck) => c.name === 'Java' ? { ...c, detail: 'openjdk version "25.0.3"' } : c;
+const sdkOnly = { sdk: async () => 'mock-sdk' };
+test('JDK on PATH that Gradle cannot use falls back to a compatible Android Studio JDK', async () => {
+  await project(async root => {
+    const result = await validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks().map(java25), ...sdkOnly, env: {}, sdkDefaults: [], findJdk: async () => '/studio/jbr' });
+    assert.equal(result.javaHome, '/studio/jbr');
+    assert.match(result.notes.join('\n'), /Android Studio JDK at \/studio\/jbr.*\(25\)/);
+  });
+});
+test('a usable JDK on PATH is never replaced', async () => {
+  await project(async root => {
+    const result = await validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks(), ...sdkOnly, env: {}, sdkDefaults: [], findJdk: async () => assert.fail('must not search for another JDK') });
+    assert.equal(result.javaHome, undefined);
+    assert.deepEqual(result.notes, []);
+  });
+});
+test('an explicit JAVA_HOME is respected even when it is unusable', async () => {
+  await project(async root => {
+    await assert.rejects(validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks().map(java25), ...sdkOnly, env: { JAVA_HOME: '/chosen' }, sdkDefaults: [], findJdk: async () => assert.fail('must not override JAVA_HOME') }), /not supported/);
+  });
+});
+test('missing java on PATH can still build with a discovered JDK', async () => {
+  await project(async root => {
+    const inspect = async () => goodChecks().map(c => c.name === 'Java' || c.name === 'Javac' ? { ...c, status: 'FAIL' as const, detail: 'not found' } : c);
+    assert.equal((await validateBuildEnvironment(root, 'npm', { inspect, ...sdkOnly, env: {}, sdkDefaults: [], findJdk: async () => '/studio/jbr' })).javaHome, '/studio/jbr');
+  });
+});
+test('the substitute JDK reaches only the Gradle step', async () => {
+  await project(async root => {
+    const seen: [string, string | undefined][] = [];
+    const run: BuildRunner = async (command, cwd, env) => { seen.push([command.args.join(' '), env?.JAVA_HOME]); await runner([])(command, cwd, env); };
+    await buildProject(root, {}, { environment: async () => ({ javaHome: '/studio/jbr', notes: ['note'] }), run });
+    const gradle = seen.find(([args]) => args.includes('assembleDebug'));
+    assert.equal(gradle?.[1], '/studio/jbr');
+    assert.ok(seen.filter(([args]) => !args.includes('assembleDebug')).every(([, home]) => home === undefined));
+  });
+});
+test('an SDK found only in its default location is handed to Gradle; a configured one is left alone', async () => {
+  await project(async root => {
+    await put(root, 'default-sdk/platforms/android-36/android.jar', 'mock');
+    const deps = { inspect: async () => goodChecks(), sdk: async () => 'mock-sdk', findJdk: async () => undefined, sdkDefaults: [path.join(root, 'default-sdk')] };
+    const found = await validateBuildEnvironment(root, 'npm', { ...deps, env: {} });
+    assert.equal(found.androidHome, path.join(root, 'default-sdk'));
+    assert.match(found.notes.join('\n'), /Android SDK at .*default-sdk/);
+    assert.equal((await validateBuildEnvironment(root, 'npm', { ...deps, env: { ANDROID_HOME: '/mine' } })).androidHome, undefined);
+  });
+});
+test('Gradle receives ANDROID_HOME only when next2apk discovered the SDK', async () => {
+  await project(async root => {
+    const seen: [string, string | undefined][] = [];
+    const run: BuildRunner = async (command, cwd, env) => { seen.push([command.args.join(' '), env?.ANDROID_HOME]); await runner([])(command, cwd, env); };
+    await buildProject(root, {}, { environment: async () => ({ androidHome: '/sdk', notes: [] }), run });
+    assert.equal(seen.find(([args]) => args.includes('assembleDebug'))?.[1], '/sdk');
+    assert.ok(seen.filter(([args]) => !args.includes('assembleDebug')).every(([, home]) => home === undefined));
+  });
+});
+test('JDK compatibility follows the Gradle wrapper version', () => {
+  assert.deepEqual(parseGradleVersion('distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14.3-all.zip'), [8, 14]);
+  assert.equal(parseJavaMajor('openjdk version "21.0.10" 2026-01-20'), 21);
+  assert.equal(isJdkSupported(21, [8, 14]), true);
+  assert.equal(isJdkSupported(25, [8, 14]), false);
+  assert.equal(isJdkSupported(25, [9, 1]), true);
+  assert.equal(isJdkSupported(17, [8, 14]), false);
+  assert.equal(isJdkSupported(undefined, [8, 14]), false);
+  assert.equal(isJdkSupported(21, undefined), false);
+});
+test('JDK discovery skips incompatible candidates and finds nothing when none qualifies', async () => {
+  const majors: Record<string, number> = { '/a': 17, '/b': 25, '/c': 21 };
+  const probe = async (home: string) => majors[home];
+  assert.equal(await findCompatibleJdk([8, 14], ['/a', '/b', '/c'], probe), '/c');
+  assert.equal(await findCompatibleJdk([8, 14], ['/a', '/b'], probe), undefined);
+  assert.ok(androidStudioJdkLocations({ ProgramFiles: 'C:\\Program Files' }, 'win32', 'C:\\Users\\a')[0]?.endsWith('Android Studio\\jbr'));
 });
 test('SDK validation checks the required platform and build tools via local.properties', async () => {
   await project(async root => {
@@ -244,6 +318,29 @@ test('SDK validation checks the required platform and build tools via local.prop
     await assert.rejects(validateSdk(root), /build-tools 35.0.0/);
     await put(root, `fake-sdk/build-tools/35.0.0/${process.platform === 'win32' ? 'aapt2.exe' : 'aapt2'}`, 'mock');
     assert.equal(await validateSdk(root), path.join(root, 'fake-sdk'));
+  });
+});
+test('SDK falls back to Android Studio default locations only when nothing is configured', async () => {
+  await project(async root => {
+    await put(root, 'default-sdk/platforms/android-36/android.jar', 'mock');
+    const defaults = [path.join(root, 'missing-sdk'), path.join(root, 'default-sdk')];
+    assert.equal(await findAndroidSdk(root, {}, defaults), path.join(root, 'default-sdk'));
+    assert.equal(await findAndroidSdk(root, { ANDROID_HOME: 'explicit' }, defaults), 'explicit');
+    assert.equal(await findAndroidSdk(root, {}, [path.join(root, 'missing-sdk')]), undefined);
+  });
+});
+test('default SDK locations follow each platform convention', () => {
+  assert.deepEqual(defaultSdkLocations({ LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' }, 'win32', 'C:\\Users\\a'), ['C:\\Users\\a\\AppData\\Local\\Android\\Sdk']);
+  assert.deepEqual(defaultSdkLocations({}, 'win32', 'C:\\Users\\a'), ['C:\\Users\\a\\AppData\\Local\\Android\\Sdk']);
+  assert.deepEqual(defaultSdkLocations({}, 'darwin', '/Users/a'), ['/Users/a/Library/Android/sdk']);
+  assert.ok(defaultSdkLocations({}, 'linux', '/home/a').includes('/home/a/Android/Sdk'));
+});
+test('missing build-tools error says exactly what to install', async () => {
+  await project(async root => {
+    await put(root, 'android/local.properties', 'sdk.dir=../fake-sdk');
+    await put(root, 'fake-sdk/platforms/android-36/android.jar', 'mock');
+    await put(root, `fake-sdk/build-tools/36.0.0/${process.platform === 'win32' ? 'aapt2.exe' : 'aapt2'}`, 'mock');
+    await assert.rejects(validateSdk(root), /sdkmanager "build-tools;35.0.0"/);
   });
 });
 test('CLI build dry-run prints the pipeline without creating artifacts', async () => {

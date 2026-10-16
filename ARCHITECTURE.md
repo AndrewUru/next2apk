@@ -18,7 +18,7 @@ Configuration is never imported: that could execute arbitrary project code or re
 4. **Build:** `build/` orchestrator validates tool versions, runs Next export, verifies assets, syncs, invokes project Gradle wrapper, finds actual debug APK and copies to `dist/android/`. Handle cancellation, failures, paths with spaces, Windows command wrappers and stale artifacts. Never report success without a newly generated artifact.
 5. **Extensions:** platform adapters for iOS/Tauri; separate signing, AAB, publishing and CI operations. UI and AI consume the same report/operation contracts. Signing secrets must not enter reports or logs.
 
-`init` now prepares Android; only `build` remains unimplemented (exit code 2). Bare `next2apk` still analyzes the current directory. `doctor` checks availability only, not a complete Java/SDK version matrix. No Gradle build is performed.
+`init` prepares Android; `build` now implements debug APK compilation. Bare `next2apk` still analyzes the current directory. `doctor` checks availability; build adds stricter SDK and JVM compatibility checks. There is no release/signing/publishing pipeline.
 
 ## Increment 2: initialization contracts
 
@@ -37,7 +37,25 @@ The dry-run performs no writes, process launches, network calls or prompts. It l
 
 Backups exclude `node_modules`, `.git` and internal `.next2apk` contents, apart from state and the remote shell that this tool overwrites. They include existing build output and may be large or contain secrets. `.next2apk/` is added to the project's `.gitignore`. Installation can execute dependency lifecycle hooks; Next build executes project code. This is not a sandbox, and arbitrary third-party effects outside the project are not recoverable through this journal. Workspace roots and symlinked project files are refused. No claims are made about restoring dependency caches, external side effects or validating all runtime navigation/authentication behavior.
 
-## Technical risks
+## Increment 3: debug build
+
+`build/pipeline.ts` validates the analyzer report, completed init state, literal Capacitor config, package manager and Android wrapper before exposing an operation plan. It reads config with TypeScript syntax parsing, not import/eval. Static Next output must still be export with the recorded webDir. A changed strategy requires review; REMOTE retains its stored HTTPS URL. `commands/build.ts` handles display only.
+
+`environment/build.ts` reuses doctor probes and checks the SDK through `environment/sdk.ts`, also shared with doctor. `local.properties` takes priority over environment SDK paths. The selected package manager and installed Next/Capacitor packages are required, as are Java/javac, the requested SDK platform and build-tools. The Capacitor 8/AGP 8.13 default Build Tools is 35.0.0; explicit literal overrides are recognized. Wrapper files are mandatory and global Gradle is not used. JDK/Gradle minimum runtime versions are validated before build processes start. This is not a universal resolver of custom Gradle plugins/toolchains; project-specific Gradle errors still propagate.
+
+`build/builder.ts` acquires the existing init lock only after environment validation. Next uses the existing package-manager command adapter; generated type scaffold changes to tsconfig.json/next-env.d.ts are restored to preserve original bytes. No source/signing/config rewriting is performed by the pipeline. External build tools execute trusted project code, not a sandbox. Public/exported/native .env filenames are rejected before packaging; NEXT_PUBLIC values remain intentionally public build inputs.
+
+`build/gradle.ts` runs only the project wrapper, with assembleDebug, optional clean, rerun-tasks and plain output. SDK download is disabled. Output is streamed and bounded stdout/stderr tails are retained in the original Gradle error. No release signing configuration is touched. Gradle may download its own distribution and declared dependencies.
+
+`build/artifacts.ts` inventories APK outputs before Gradle and selects exactly one fresh debug candidate afterward (fingerprint includes times, size and SHA-256). It verifies a nonempty ZIP header, copies exclusively, verifies the copy and publishes metadata last. This is not a full APK signature/device validation. Multiple APK candidates are refused. Failed publication removes its own partial copy. Existing artifacts are cleaned only when next2apk metadata, app ID, normalized filename, size and hash prove ownership; unrelated dist files remain untouched. A valid old publication is invalidated before a new build attempt to avoid stale success after failure. `--clean` additionally delegates native build-output cleanup to Gradle; it does not recursively delete arbitrary project paths.
+
+The read-only dry-run performs no environment subprocess probes, mutation, cleaning or tool execution. It validates configuration and prints the steps that a real run will execute. It therefore cannot certify SDK/JDK availability. Every runtime error is wrapped with its step and original cause.
+
+Automated verification uses temporary initialized project trees and injected process/environment adapters, with all 43 prior tests retained (the old build-placeholder assertion now checks a missing-init failure). The real STATIC attempt in this environment was blocked by absent Android SDK and Java 25 vs Gradle 8.14.3; no SDK/JDK installation or real APK success is claimed.
+
+References: [Android command-line builds](https://developer.android.com/build/building-cmdline), [Gradle JVM compatibility](https://docs.gradle.org/current/userguide/compatibility.html), [AGP 8.13 requirements](https://developer.android.com/build/releases/agp-8-13-0-release-notes).
+
+## Remaining technical risks
 
 - A static scanner cannot prove runtime behavior; dynamic config, route generation, auth, image optimization and environment usage need review and a real export build.
 - App Router GET handlers may be static; other HTTP methods and request-dependent handlers require a server. Dynamic routes need static parameters/paths.

@@ -15,7 +15,7 @@ clicks as possible.**
 [![License:
 MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
-![Tests](https://img.shields.io/badge/tests-43%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-76%20passing-brightgreen)
 ![Status](https://img.shields.io/badge/status-building%20the%20thing-orange)
 
 **If this saves you from opening Android Studio even once, you legally
@@ -127,7 +127,7 @@ bullshit.
 
 ## Current status
 
-The analyzer and safe Capacitor initialization increments are implemented. APK compilation is still pending.
+Analysis, safe Capacitor initialization and a debug APK build pipeline are implemented. The build pipeline requires a configured Android SDK and compatible JDK; it never installs them automatically.
 
 ### Working
 
@@ -148,7 +148,7 @@ The analyzer and safe Capacitor initialization increments are implemented. APK c
 -   package manager detection
 -   TypeScript strict
 -   test fixtures
--   **43 tests passing**
+-   **76 tests passing**
 
 ### Also working: Android preparation
 
@@ -157,13 +157,12 @@ The analyzer and safe Capacitor initialization increments are implemented. APK c
 -   safe project modification
 -   backups
 -   Android project generation
+-   `next2apk build` (debug APK pipeline, dry-run and clean)
 
 `init` prepares and synchronizes Android. It does **not** run Gradle or generate an APK.
 
 ### Not pretending to work yet
 
--   `next2apk build`
--   APK generation
 -   APK signing
 -   AAB
 -   Google Play publishing
@@ -243,9 +242,38 @@ Each run records `.next2apk/state.json` with version, date, strategy, configurat
 
 On failure the original tool output remains visible and the error identifies the step. Partial changes and backups remain for inspection; there is no automatic rollback. Package lifecycle scripts and Next build execute project code, so their arbitrary external effects are outside the backup guarantee. Workspace roots and symlinked project files are not supported in this increment.
 
-Capacitor core, CLI and Android are pinned to **8.5.3**, requiring Node >=22. TypeScript is added only if absent. Tests inject process runners and need no SDK. `next2apk build` remains a placeholder (exit 2); successful init does not certify APK compilation.
+Capacitor core, CLI and Android are pinned to **8.5.3**, requiring Node >=22. TypeScript is added only if absent. Tests inject process runners and need no SDK. Successful init does not certify APK compilation: build validates the environment separately.
 
 Public APIs: `planInit(path, options)`, `initializeProject(path, options, {run, log})`, `validateAppId()` and `generateConfig()`. See [ARCHITECTURE.md](ARCHITECTURE.md) for module boundaries and limitations.
+
+### Build a debug APK
+
+```bash
+next2apk build ./my-app --dry-run
+next2apk build ./my-app
+next2apk build ./my-app --clean
+```
+
+Omit the path to use the current directory. `build` requires a completed `.next2apk/state.json`, matching literal `capacitor.config.ts`, an Android project with its Gradle Wrapper and a compatible environment. It never substitutes for `init`, converts server code, edits signing configuration or installs an SDK.
+
+Preflight re-analyzes the project and checks strategy/configuration drift. STATIC and eligible HYBRID projects run their installed Next binary through npm/pnpm/yarn, validate `webDir/index.html`, sync Capacitor and invoke `gradlew.bat` on Windows or `./gradlew` on Unix. REMOTE reuses the stored HTTPS URL and local shell, skipping Next build. HYBRID and REMOTE still require their external infrastructure. Arbitrary package.json scripts are not selected.
+
+Environment validation reuses doctor and additionally checks SDK platform/build-tools and Java/Gradle compatibility. For init's Capacitor 8 template, use a compatible JDK (21 recommended), SDK platform 36 and Build Tools 35.0.0. `JAVA_HOME`, `ANDROID_HOME`/`ANDROID_SDK_ROOT` and `android/local.properties` are respected. No global Gradle is needed. The wrapper can download its Gradle distribution and Gradle dependencies, but SDK auto-download is disabled.
+
+Only `assembleDebug` is supported. A new, nonempty debug APK must be found under Android's APK output tree; unchanged old files, multiple candidates and non-ZIP files are rejected. The verified result is copied to:
+
+```text
+dist/android/<normalized-app-name>-debug.apk
+dist/android/build.json
+```
+
+Metadata contains app identity, strategy, creation time, size and SHA-256, with an ownership marker for safe cleanup. It contains no environment values or remote credentials. Existing unknown/tampered destination files are protected. Before a real rebuild, only a previously hash-verified next2apk artifact and metadata are invalidated, so failed attempts cannot advertise an old APK as a new result. `--clean` also requests Gradle's native `clean` task; it never deletes `android/` or unrelated files in `dist/`.
+
+`--dry-run` checks project/state/configuration read-only and displays the pipeline; it does not probe tools, run Next/Capacitor/Gradle, create `dist/`, clean files or prove that the machine can compile. Missing initialization still blocks the plan. Runtime failures report the exact step and retain original tool diagnostics. Build exits 1 on errors and 0 on successful publication/valid dry-run.
+
+**DEBUG APK != RELEASE APK.** Debug uses Android's standard development signing and is intended for testing. Release signing, keystore management, AAB and Play Store deployment are not implemented. Custom native paths, split APKs/flavors, dynamic Capacitor configs and `webDir: 'dist'` (which collides with artifact publication) are deliberately rejected in this increment.
+
+The 76 automated tests require no SDK. A real STATIC build was attempted on the development machine and stopped before compilation because Android SDK was unconfigured and Java 25 was incompatible with its Gradle 8.14.3 wrapper. **No real APK has been generated or device-tested in this increment.** No SDK/JDK was installed or changed.
 
 ### Analyze
 
@@ -483,8 +511,8 @@ Future us already has enough problems.
 [██████████] Analyzer
 [██████████] Doctor
 [██████████] Init + Capacitor
-[░░░░░░░░░░] Android build
-[░░░░░░░░░░] APK output
+[██████████] Android debug build pipeline (real SDK verification pending)
+[██████████] APK output and metadata
 [░░░░░░░░░░] Signing
 [░░░░░░░░░░] AAB
 [░░░░░░░░░░] GUI

@@ -1,4 +1,4 @@
-::: {align="center"}
+
 # next2apk
 
 ### Your Next.js project wants to be an Android app.
@@ -563,7 +563,7 @@ But at least leave the fucking star.
 
 ------------------------------------------------------------------------
 
-::: {align="center"}
+
 ### Next.js → next2apk → Android
 
 **Less configuration. Fewer rituals. More APK.**

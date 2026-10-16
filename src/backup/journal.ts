@@ -24,11 +24,11 @@ export class BackupJournal {
   private revision = 0;
   private constructor(private root: string, private baseline: Snapshot, private directory: string, public state: InitState) {}
   static async create(root: string, plan: InitPlan): Promise<BackupJournal> {
+    const pkg = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     await mkdir(path.join(root, '.next2apk'), { recursive: true });
     const lock = await open(path.join(root, '.next2apk/init.lock'), 'wx');
     await lock.close();
     const directory = `.next2apk/backups/${new Date().toISOString().replaceAll(':', '-')}-${randomUUID()}`;
-    const pkg = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     const state: InitState = { version: pkg.version, date: new Date().toISOString(), strategy: plan.report.strategy, configuration: plan.configuration, packageManager: plan.packageManager!, status: 'running', step: 'backup', createdFiles: [], modifiedFiles: [], removedFiles: [], backups: [] };
     const journal = new BackupJournal(root, plan.baseline, directory, state);
     try {
@@ -39,7 +39,14 @@ export class BackupJournal {
       for (const file of ['.next2apk/state.json', '.next2apk/remote-web/index.html']) if (await exists(path.join(root, file))) await journal.backup(file);
       await journal.checkpoint('backup');
       return journal;
-    } catch (error) { await journal.close(); throw error; }
+    } catch (error) {
+      state.status = 'failed';
+      state.error = error instanceof Error ? error.message : String(error);
+      try { await journal.checkpoint('backup'); }
+      catch (stateError) { throw new AggregateError([error, stateError], `${String(error)}; could not record backup failure: ${String(stateError)}`); }
+      finally { await journal.close(); }
+      throw error;
+    }
   }
   private async backup(file: string): Promise<void> {
     const backup = `${this.directory}/files/${file}`;

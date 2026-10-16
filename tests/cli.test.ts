@@ -38,4 +38,7 @@ test('noninteractive init requests missing application ID before mutation', () =
   const result = run(['init', fixture]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /appId is required/);
+  const missing = run(['init', 'fixtures/nonexistent-project']);
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /step "analyze\/plan"/);
 });

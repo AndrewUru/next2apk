@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import path from 'node:path';
-import { initializeProject, planInit, type InitOptions, type InitPlan } from '../capacitor/initializer.js';
+import { initializeProject, planInit, InitError, type InitOptions, type InitPlan } from '../capacitor/initializer.js';
 
 export function formatInitPlan(plan: InitPlan): string {
   return [
@@ -25,7 +25,7 @@ export function formatInitPlan(plan: InitPlan): string {
     'No files were modified.',
   ].join('\n');
 }
-export async function initCommand(directory = process.cwd(), options: InitOptions = {}): Promise<void> {
+async function performInitCommand(directory: string, options: InitOptions): Promise<void> {
   if (options.dryRun) {
     const plan = await planInit(directory, options);
     console.log(formatInitPlan(plan));
@@ -46,4 +46,8 @@ export async function initCommand(directory = process.cwd(), options: InitOption
   }
   await initializeProject(directory, options, { log: console.log });
   console.log('\nAndroid project ready.\n\nNext step:\n\nnext2apk build\n\nAPK build is not implemented yet; no Gradle build was executed.');
+}
+export async function initCommand(directory = process.cwd(), options: InitOptions = {}): Promise<void> {
+  try { await performInitCommand(directory, options); }
+  catch (error) { throw error instanceof InitError ? error : new InitError('analyze/plan', error); }
 }

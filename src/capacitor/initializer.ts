@@ -43,9 +43,16 @@ export async function planInit(input = process.cwd(), options: InitOptions = {})
   const commands: InitPlan['commands'] = [];
   const packageJson = await exists(path.join(root, 'package.json')) ? await readFile(path.join(root, 'package.json'), 'utf8') : '{}';
   let needsTypescript = true;
+  let reactTypes: string | undefined;
   try {
     const pkg = JSON.parse(packageJson) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; workspaces?: unknown };
     needsTypescript = !(pkg.dependencies?.typescript || pkg.devDependencies?.typescript);
+    // Next.js installs missing React types itself only outside CI, and only when a person can be prompted. Declare them for reproducible builds.
+    const react = pkg.dependencies?.react ?? pkg.devDependencies?.react;
+    if (report.typescript && report.strategy !== 'REMOTE' && react && !(pkg.dependencies?.['@types/react'] || pkg.devDependencies?.['@types/react'])) {
+      const major = react.match(/\d+/)?.[0];
+      reactTypes = major ? `@types/react@${major}` : '@types/react';
+    }
     if (pkg.workspaces) blockers.push('Workspace root detected. Initialize an isolated application package; workspace installs are not supported yet.');
   } catch { /* Analyzer reports invalid package JSON. */ }
   const capture = async (fn: () => void | Promise<void>): Promise<void> => {
@@ -98,7 +105,7 @@ export async function planInit(input = process.cwd(), options: InitOptions = {})
   });
   for (const change of changes) await capture(() => assertSafePath(root, change.file));
   if (packageManager) {
-    for (const process of installCommands(packageManager, needsTypescript)) commands.push({ step: 'install', process });
+    for (const process of installCommands(packageManager, needsTypescript, reactTypes ? [reactTypes] : [])) commands.push({ step: 'install', process });
     if (report.strategy !== 'REMOTE') commands.push({ step: 'assets', process: binaryCommand(packageManager, 'next', ['build']) });
     commands.push({ step: 'android', process: binaryCommand(packageManager, 'cap', ['add', 'android']) });
     commands.push({ step: 'sync', process: binaryCommand(packageManager, 'cap', ['sync', 'android']) });

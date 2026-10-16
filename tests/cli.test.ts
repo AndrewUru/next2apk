@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 const cli = path.resolve('src/cli/index.ts');
@@ -41,4 +43,16 @@ test('noninteractive init requests missing application ID before mutation', () =
   const missing = run(['init', 'fixtures/nonexistent-project']);
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /step "analyze\/plan"/);
+});
+
+test('doctor reports the Gradle JDK decision only for projects with a Gradle wrapper', async () => {
+  const { doctor } = await import('../src/doctor/index.js');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'doctor '));
+  try {
+    assert.equal((await doctor(root)).some(c => c.name === 'Gradle JDK'), false);
+    await mkdir(path.join(root, 'android/gradle/wrapper'), { recursive: true });
+    await writeFile(path.join(root, 'android/gradle/wrapper/gradle-wrapper.properties'), 'distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.3-all.zip');
+    const check = (await doctor(root)).find(c => c.name === 'Gradle JDK');
+    assert.ok(check && /Gradle 8\.14/.test(check.detail));
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

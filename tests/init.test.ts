@@ -187,3 +187,34 @@ test('preexisting lock prevents concurrent initialization without changes', asyn
     assert.equal(await readFile(path.join(root, '.next2apk/init.lock'), 'utf8'), 'other-process');
   });
 });
+
+const devInstall = (plan: Awaited<ReturnType<typeof planInit>>) => plan.commands.find(c => c.process.args.includes('-D'))?.process.args ?? [];
+const tsFiles = { 'tsconfig.json': '{}' };
+test('TypeScript project without React types installs them matching the React major', async () => {
+  await project({ ...tsFiles, 'package.json': JSON.stringify({ dependencies: { next: '16.x', react: '^19.1.0' }, packageManager: 'npm@11.12.1' }) }, async root => {
+    assert.ok(devInstall(await planInit(root, options)).includes('@types/react@19'));
+  });
+});
+test('declared React types are never reinstalled or replaced', async () => {
+  await project({ ...tsFiles, 'package.json': JSON.stringify({ dependencies: { next: '16.x', react: '19.x' }, devDependencies: { '@types/react': '18.3.0' }, packageManager: 'npm@11.12.1' }) }, async root => {
+    assert.ok(!devInstall(await planInit(root, options)).some(a => a.startsWith('@types/react')));
+  });
+});
+const reactPackage = JSON.stringify({ dependencies: { next: '16.x', react: '19.x' }, packageManager: 'npm@11.12.1' });
+test('JavaScript projects do not get React types', async () => {
+  await project({ 'package.json': reactPackage }, async root => {
+    await rm(path.join(root, 'app/page.tsx'));
+    await put(root, 'app/page.jsx', 'export default function Page() {return null}');
+    const plan = await planInit(root, options);
+    assert.ok(plan.commands.some(c => c.process.args.includes('-D')), 'dev install still planned');
+    assert.ok(!devInstall(plan).some(a => a.startsWith('@types/react')));
+  });
+});
+test('REMOTE strategy runs no Next build and does not get React types', async () => {
+  await project({ ...tsFiles, 'package.json': reactPackage, 'middleware.ts': 'export function middleware() {}' }, async root => {
+    const plan = await planInit(root, { ...options, remoteUrl: 'https://example.com/app' });
+    assert.equal(plan.report.strategy, 'REMOTE');
+    assert.ok(!plan.commands.some(c => c.step === 'assets'));
+    assert.ok(!devInstall(plan).some(a => a.startsWith('@types/react')));
+  });
+});

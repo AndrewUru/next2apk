@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -31,6 +31,9 @@ jobs:
       - run: npm run build
       - name: Copy fixture outside the repository
         run: cp -r fixtures/static-next "$RUNNER_TEMP/app"
+      # Next.js only auto-installs missing TypeScript types outside CI; create-next-app projects ship them.
+      - name: Declare TypeScript types like a real project
+        run: npm --prefix "$RUNNER_TEMP/app" pkg set devDependencies.@types/react=19.x devDependencies.@types/node=22.x
       - name: Initialize
         run: node dist/cli/index.js init "$RUNNER_TEMP/app" --app-id com.example.staticnext --app-name StaticNext
       - name: Build debug APK

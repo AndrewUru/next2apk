@@ -33,7 +33,10 @@ jobs:
         run: cp -r fixtures/static-next "$RUNNER_TEMP/app"
       # Next.js only auto-installs missing TypeScript types outside CI; create-next-app projects ship them.
       - name: Declare TypeScript types like a real project
-        run: npm --prefix "$RUNNER_TEMP/app" pkg set devDependencies.@types/react=19.x devDependencies.@types/node=22.x
+        working-directory: ${{ runner.temp }}/app
+        run: |
+          npm pkg set devDependencies.@types/react=19.x devDependencies.@types/node=22.x
+          grep -q '"@types/react"' package.json
       - name: Initialize
         run: node dist/cli/index.js init "$RUNNER_TEMP/app" --app-id com.example.staticnext --app-name StaticNext
       - name: Build debug APK

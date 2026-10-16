@@ -65,14 +65,24 @@ export async function analyzeProject(input = process.cwd()): Promise<AnalysisRep
     const diagnostics = (source as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
     if (diagnostics?.length) add('SOURCE_PARSE_REVIEW', 'warning', 'Source could not be fully parsed; review manually.', file);
     const identifiers = new Set<string>();
-    const strings = new Set<string>();
     const exports = new Set<string>();
     let serverAction = false;
     let runtime = false;
+    let standalone = false;
     function visit(node: ts.Node): void {
       if (ts.isIdentifier(node)) identifiers.add(node.text);
-      if (ts.isStringLiteralLike(node)) strings.add(node.text);
-      if (ts.isExpressionStatement(node) && ts.isStringLiteral(node.expression) && node.expression.text === 'use server') serverAction = true;
+      if (ts.isSourceFile(node) || ts.isBlock(node)) {
+        for (const statement of node.statements) {
+          if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) break;
+          if (statement.expression.text === 'use server') serverAction = true;
+        }
+      }
+      if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'dynamic' && node.initializer && ts.isStringLiteral(node.initializer) && node.initializer.text === 'force-dynamic') runtime = true;
+      if (ts.isPropertyAssignment(node) && ts.isStringLiteral(node.initializer)) {
+        const name = ts.isIdentifier(node.name) || ts.isStringLiteral(node.name) ? node.name.text : '';
+        if (name === 'cache' && node.initializer.text === 'no-store') add('UNCACHED_FETCH_REVIEW', 'warning', 'Uncached data access detected; verify it can run during static generation.', file);
+        if (name === 'output' && node.initializer.text === 'standalone') standalone = true;
+      }
       if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
         const name = node.moduleSpecifier.text;
         if (name.startsWith('@supabase/')) supabase = true;
@@ -86,13 +96,14 @@ export async function analyzeProject(input = process.cwd()): Promise<AnalysisRep
         if (ts.isVariableStatement(node)) for (const decl of node.declarationList.declarations) if (ts.isIdentifier(decl.name)) exports.add(decl.name.text);
       }
       if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) for (const e of node.exportClause.elements) exports.add(e.name.text);
+      if (ts.isExportDeclaration(node) && node.moduleSpecifier) add('REEXPORT_REVIEW', 'warning', 'Re-exported implementation is not resolved; review server behavior and route exports.', file);
       ts.forEachChild(node, visit);
     }
     visit(source);
     if (identifiers.has('env') && identifiers.has('process')) add('ENV_USAGE_REVIEW', 'warning', 'Environment usage requires review, including build-time values and client exposure.', file);
     if (configFiles.includes(file)) {
       add('CONFIG_REVIEW', 'warning', 'Configuration was not executed. Verify export output, image settings, redirects, rewrites and dynamic configuration.', file);
-      if (strings.has('standalone')) add('OUTPUT_STANDALONE', 'error', 'Standalone output requires a Node.js server; it is not static export.', file);
+      if (standalone) { remote = true; add('OUTPUT_STANDALONE', 'error', 'Standalone output requires a Node.js server; it is not static export.', file); }
     }
     if (/^(src\/)?pages\/api\/.*\.[jt]sx?$/.test(file)) {
       features.apiRoutes.push(file); backend = true;
@@ -113,7 +124,7 @@ export async function analyzeProject(input = process.cwd()): Promise<AnalysisRep
       features.middleware.push(file); remote = true;
       add('MIDDLEWARE', 'error', 'Middleware/proxy requires a server and is unavailable in static export.', file);
     }
-    if (runtime || exports.has('getServerSideProps') || strings.has('force-dynamic') || strings.has('no-store')) {
+    if (runtime || exports.has('getServerSideProps')) {
       remote = true;
       add('SERVER_RUNTIME', 'error', 'Request-time APIs, SSR or uncached runtime data detected; requires a server or refactoring.', file);
     }

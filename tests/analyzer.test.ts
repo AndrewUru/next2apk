@@ -89,3 +89,13 @@ test('generated/dependency trees are excluded and private env values are hidden'
 test('invalid project paths reject', async () => {
   await assert.rejects(analyzeProject(path.join(os.tmpdir(), 'next2apk-nonexistent', 'project')));
 });
+test('runtime option words in UI strings do not imply a server', async () => {
+  await project({ 'app/page.tsx': 'const label = "force-dynamic"; const other = "no-store"; export default function Page() {return <main>{label}</main>;}' }, async root => {
+    assert.equal((await analyzeProject(root)).compatibility, 'PASS');
+  });
+});
+test('re-exported handlers cannot silently pass', async () => {
+  await project({ 'app/data/route.ts': 'export * from "../../handlers";' }, async root => {
+    assert.equal((await analyzeProject(root)).compatibility, 'WARNING');
+  });
+});

@@ -1,0 +1,28 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+
+const cli = path.resolve('src/cli/index.ts');
+const fixture = path.resolve('fixtures/static-next');
+function run(args: string[], cwd = process.cwd()) {
+  return spawnSync(process.execPath, ['--import', 'tsx', cli, ...args], { cwd, encoding: 'utf8', timeout: 15000 });
+}
+test('CLI defaults to cwd and produces a JSON contract', () => {
+  const result = run(['analyze', '--json'], fixture);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).root, fixture);
+  assert.equal(JSON.parse(result.stdout).schemaVersion, 1);
+  assert.match(run([], fixture).stdout, /Recommended strategy:\nSTATIC/);
+});
+test('CLI returns nonzero for blockers and invalid arguments', () => {
+  assert.equal(run(['analyze', 'fixtures/server-actions-next']).status, 1);
+  assert.equal(run(['unknown-command']).status, 1);
+  assert.equal(run(['analyze', '--unknown']).status, 1);
+});
+test('pending phases do not claim successful conversion', () => {
+  for (const command of ['init', 'build']) {
+    const result = run([command, fixture]);
+    assert.equal(result.status, 2); assert.match(result.stderr, /not implemented/); assert.equal(result.stdout, '');
+  }
+});

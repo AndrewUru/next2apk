@@ -8,6 +8,8 @@ import { gradleCommand } from '../src/build/gradle.js';
 import { validateBuildEnvironment } from '../src/environment/build.js';
 import type { DoctorCheck } from '../src/doctor/index.js';
 import { snapshot } from '../src/project/files.js';
+import { validateSdk } from '../src/environment/sdk.js';
+import { spawnSync } from 'node:child_process';
 
 const app = { appId: 'com.example.test', appName: 'My App', webDir: 'out' };
 async function put(root: string, file: string, value: string | Buffer) {
@@ -220,5 +222,25 @@ test('.env files in public assets are never synchronized or packaged', async () 
 test('incompatible Java and Gradle are diagnosed before compilation', async () => {
   await project(async root => {
     await assert.rejects(validateBuildEnvironment(root, 'npm', { inspect: async () => goodChecks().map(c => c.name === 'Java' ? { ...c, detail: 'openjdk version "25.0.3"' } : c), sdk: async () => 'mock-sdk' }), /not supported/);
+  });
+});
+test('SDK validation checks the required platform and build tools via local.properties', async () => {
+  await project(async root => {
+    await put(root, 'android/local.properties', 'sdk.dir=../fake-sdk');
+    await assert.rejects(validateSdk(root), /android-36 is missing/);
+    await put(root, 'fake-sdk/platforms/android-36/android.jar', 'mock');
+    await assert.rejects(validateSdk(root), /build-tools 35.0.0/);
+    await put(root, `fake-sdk/build-tools/35.0.0/${process.platform === 'win32' ? 'aapt2.exe' : 'aapt2'}`, 'mock');
+    assert.equal(await validateSdk(root), path.join(root, 'fake-sdk'));
+  });
+});
+test('CLI build dry-run prints the pipeline without creating artifacts', async () => {
+  await project(async root => {
+    const before = await snapshot(root);
+    const cli = path.resolve('src/cli/index.ts');
+    const result = spawnSync(process.execPath, ['--import', 'tsx', cli, 'build', root, '--dry-run', '--clean'], { encoding: 'utf8', timeout: 30000 });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /clean assembleDebug/); assert.match(result.stdout, /No files were modified/);
+    assert.deepEqual(await snapshot(root), before);
   });
 });

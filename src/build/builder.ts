@@ -52,7 +52,7 @@ export async function buildProject(input = process.cwd(), options: BuildOptions 
     log('✓ Environment validated');
     // REMOTE shell must exist before any mutations; local web assets are regenerated below.
     if (plan.report.strategy === 'REMOTE') await validateWebOutput(plan.root, plan.configuration.webDir);
-    await rejectEnvFiles(plan.root, 'android/app/src/main/assets');
+    await rejectEnvFiles(plan.root, 'android/app/src');
     await rejectEnvFiles(plan.root, 'public');
     step = 'lock';
     const lockPath = path.join(plan.root, '.next2apk/init.lock');

@@ -26,3 +26,16 @@ test('pending phases do not claim successful conversion', () => {
     assert.equal(result.status, 2); assert.match(result.stderr, /not implemented/); assert.equal(result.stdout, '');
   }
 });
+test('init dry-run prints strategy and concrete operations without executing them', () => {
+  const result = run(['init', fixture, '--dry-run']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Strategy: STATIC/);
+  assert.match(result.stdout, /create capacitor.config.ts/);
+  assert.match(result.stdout, /npm install @capacitor\/core@8.5.3/);
+  assert.match(result.stdout, /No files were modified/);
+});
+test('noninteractive init requests missing application ID before mutation', () => {
+  const result = run(['init', fixture]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /appId is required/);
+});

@@ -15,7 +15,7 @@ export async function runGradle(command: BuildCommand, cwd: string): Promise<voi
   if (!['gradlew.bat', './gradlew'].includes(command.command) || command.args.some(a => !['clean', 'assembleDebug', '--rerun-tasks', '--console=plain', '--no-daemon', '-Pandroid.builder.sdkDownload=false'].includes(a))) throw new Error('Unsupported Gradle command.');
   await new Promise<void>((resolve, reject) => {
     const child = command.command === 'gradlew.bat'
-      ? spawn('cmd.exe', ['/d', '/s', '/c', `gradlew.bat ${command.args.join(' ')}`], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      ? spawn('cmd.exe', ['/d', '/s', '/c', `.\\gradlew.bat ${command.args.join(' ')}`], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
       : spawn('./gradlew', command.args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     // Bound retained diagnostics, while streaming all output. Do not dump environment variables.

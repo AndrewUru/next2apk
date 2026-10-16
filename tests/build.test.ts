@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, chmod } from 'node:fs
 import path from 'node:path';
 import os from 'node:os';
 import { buildProject, planBuild, generateConfig, type BuildRunner, type ArtifactMetadata } from '../src/index.js';
-import { gradleCommand } from '../src/build/gradle.js';
+import { gradleCommand, runGradle } from '../src/build/gradle.js';
 import { validateBuildEnvironment } from '../src/environment/build.js';
 import type { DoctorCheck } from '../src/doctor/index.js';
 import { snapshot } from '../src/project/files.js';
@@ -128,6 +128,18 @@ for (const missing of ['Java', 'Android SDK']) test(`missing ${missing} prevents
   });
 });
 test('Windows uses gradlew.bat without requiring global Gradle', () => { assert.equal(gradleCommand('win32').command, 'gradlew.bat'); });
+test('Windows runs the wrapper even when cmd.exe skips the current directory', { skip: process.platform !== 'win32' }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'gradle-'));
+  const previous = process.env.NoDefaultCurrentDirectoryInExePath;
+  process.env.NoDefaultCurrentDirectoryInExePath = '1';
+  try {
+    await writeFile(path.join(dir, 'gradlew.bat'), '@echo off\r\nexit /b 0');
+    await runGradle(gradleCommand('win32'), dir);
+  } finally {
+    if (previous === undefined) delete process.env.NoDefaultCurrentDirectoryInExePath; else process.env.NoDefaultCurrentDirectoryInExePath = previous;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 test('Unix uses ./gradlew without requiring global Gradle', () => { assert.equal(gradleCommand('linux').command, './gradlew'); assert.equal(gradleCommand('darwin').command, './gradlew'); });
 for (const [failure, step] of [['next build', 'next'], ['cap sync', 'sync'], ['assembleDebug', 'gradle']]) test(`${failure} failure preserves original error and publishes nothing`, async () => {
   await project(async root => {

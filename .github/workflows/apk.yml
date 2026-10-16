@@ -1,0 +1,46 @@
+name: Real APK build
+
+# Slow end-to-end check: init + debug build of a fixture with a real Android SDK.
+# Run manually, and weekly to catch Capacitor/AGP/Gradle drift.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;35.0.0
+      - run: npm ci
+      - run: npm run build
+      - name: Copy fixture outside the repository
+        run: cp -r fixtures/static-next "$RUNNER_TEMP/app"
+      - name: Initialize
+        run: node dist/cli/index.js init "$RUNNER_TEMP/app" --app-id com.example.staticnext --app-name StaticNext
+      - name: Build debug APK
+        run: node dist/cli/index.js build "$RUNNER_TEMP/app"
+      - name: Verify the APK
+        run: |
+          test -s "$RUNNER_TEMP/app/dist/android/staticnext-debug.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$RUNNER_TEMP/app/dist/android/staticnext-debug.apk" | head -3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staticnext-debug-apk
+          path: ${{ runner.temp }}/app/dist/android/
+          if-no-files-found: error

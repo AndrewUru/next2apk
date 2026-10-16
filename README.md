@@ -1,103 +1,537 @@
+::: {align="center"}
 # next2apk
 
-CLI open source en Node.js y TypeScript para analizar proyectos Next.js antes de preparar una aplicación Android con Capacitor.
+### Your Next.js project wants to be an Android app.
 
-**Estado: primer incremento (CLI y analyzer). Todavía no genera APKs.** `init` y `build` están registrados, pero terminan con un mensaje explícito de funcionalidad pendiente y código 2. No instalan dependencias ni cambian el proyecto analizado.
+### It just doesn't know it yet.
 
-## Desarrollo y uso local
+![next2apk --- Turn your Next.js project into an Android
+app](https://elsaltoweb.es/wp-content/uploads/2026/10/Convierte-Next.js-en-una-app-Android.webp)
 
-Requisitos: Node.js >=22 y npm.
+**Analyze a Next.js project, figure out how much Android pain is hiding
+inside it, and eventually turn the damn thing into an APK with as few
+clicks as possible.**
 
-```sh
-npm ci
+[![License:
+MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
+![Tests](https://img.shields.io/badge/tests-18%20passing-brightgreen)
+![Status](https://img.shields.io/badge/status-building%20the%20thing-orange)
+
+**If this saves you from opening Android Studio even once, you legally
+owe the repo a ⭐.**\
+*Not legally. But spiritually? Absolutely.*
+:::
+
+------------------------------------------------------------------------
+
+## What the hell is next2apk?
+
+You built a project in Next.js.
+
+It works.
+
+It looks good.
+
+Someone asks:
+
+> "Can we have it as an Android app?"
+
+And suddenly you're reading about Gradle, Android SDKs, Capacitor,
+signing keys, manifests, static exports, server components, Java
+versions and seventeen different ways to ruin an otherwise perfectly
+good afternoon.
+
+**next2apk exists to make that somebody else's problem.**
+
+Ideally:
+
+``` bash
+npx next2apk
+```
+
+Then:
+
+``` text
+✓ Analyzing project...
+✓ Figuring out what weird shit you're doing...
+✓ Configuring Android...
+✓ Building...
+✓ Questioning several architectural decisions...
+✓ Done.
+
+dist/android/your-app.apk
+```
+
+We're not quite there yet.
+
+But that's the destination.
+
+------------------------------------------------------------------------
+
+## The idea
+
+``` text
+┌─────────────────┐
+│                 │
+│  Next.js app    │
+│                 │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│                 │
+│    next2apk     │
+│                 │
+│  analyze        │
+│  configure      │
+│  Capacitor      │
+│  Android        │
+│  Gradle         │
+│                 │
+└────────┬────────┘
+         │
+         ▼
+     ┌───────┐
+     │  APK  │
+     └───────┘
+
+   everybody goes home
+```
+
+The goal is not to pretend every Next.js project is magically a static
+website.
+
+Because it isn't.
+
+next2apk analyzes the project first and determines what we're dealing
+with.
+
+  -----------------------------------------------------------------------
+  Strategy                            Meaning
+  ----------------------------------- -----------------------------------
+  `STATIC`                            Congratulations. Life is good.
+
+  `HYBRID`                            Some server-side stuff exists.
+                                      We'll need to deal with it.
+
+  `REMOTE`                            Your app needs a server. No amount
+                                      of positive thinking will change
+                                      that.
+  -----------------------------------------------------------------------
+
+No fake magic. No "AI converted your backend into Android somehow"
+bullshit.
+
+------------------------------------------------------------------------
+
+## Current status
+
+The first increment is alive.
+
+### Working
+
+-   `next2apk analyze`
+-   `next2apk doctor`
+-   reusable project analyzer
+-   text reports
+-   JSON reports
+-   `STATIC`, `HYBRID` and `REMOTE` strategy detection
+-   App Router detection
+-   Pages Router detection
+-   API Route detection
+-   Route Handler detection
+-   Server Action detection
+-   middleware detection
+-   Supabase detection
+-   environment variable analysis
+-   package manager detection
+-   TypeScript strict
+-   test fixtures
+-   **18 tests passing**
+
+### Currently being built
+
+-   `next2apk init`
+-   Capacitor integration
+-   safe project modification
+-   backups
+-   Android project generation
+
+### Not pretending to work yet
+
+-   `next2apk build`
+-   APK generation
+-   APK signing
+-   AAB
+-   Google Play publishing
+-   GUI
+-   Tauri desktop app
+-   iOS
+
+If a command isn't implemented, next2apk tells you.
+
+Revolutionary concept, apparently.
+
+------------------------------------------------------------------------
+
+## Try it
+
+Clone the repository and install dependencies:
+
+``` bash
+git clone <YOUR-REPOSITORY-URL>
+cd next2apk
+npm install
 npm run build
-node dist/cli/index.js analyze ./fixtures/static-next
-node dist/cli/index.js analyze /ruta/al/proyecto --json
+```
+
+Analyze one of the included fixtures:
+
+``` bash
+node dist/cli/index.js analyze fixtures/static-next
+```
+
+Analyze your own questionable life choices:
+
+``` bash
+node dist/cli/index.js analyze /path/to/your/next-project
+```
+
+Want JSON because you're a civilized person?
+
+``` bash
+node dist/cli/index.js analyze /path/to/your/project --json
+```
+
+Check whether your machine is ready for Android-related suffering:
+
+``` bash
 node dist/cli/index.js doctor
-npm test
 ```
 
-Para probar el comando localmente:
+------------------------------------------------------------------------
 
-```sh
-npm link
-next2apk analyze /ruta/al/proyecto
-next2apk analyze
-next2apk
-next2apk doctor
-next2apk init /ruta/al/proyecto
-next2apk build /ruta/al/proyecto
-```
+## Example
 
-Sin path, se utiliza el directorio actual. `next2apk` sin argumentos equivale a `analyze`. Usa comillas si la ruta contiene espacios. `npm link` registra el ejecutable local en el entorno de npm.
+``` text
+next2apk analyze ./my-app
 
-La experiencia futura será `npx next2apk`, una vez publicado y completado el flujo. Este repositorio no se ha publicado en npm; ese comando podría resolver un paquete ajeno. Para inspeccionar el paquete local: `npm pack --dry-run`.
+Project
+────────────────────────────
+Next.js          detected
+Router           App Router
+TypeScript       yes
+Supabase         detected
 
-## Informe
-
-```text
-Next.js       16.x (declared version)
-Router        App Router
-TypeScript    yes
-Package mgr   npm
-Config        none
-Supabase      not detected
-Environment   none detected
-
-Static export compatibility:
-PASS
-
-Issues:
-- No known blockers detected.
+Compatibility
+────────────────────────────
+Static export    warning
+Server Actions   2 detected
+API Routes       none
+Middleware       none
 
 Recommended strategy:
-STATIC
+
+HYBRID
 ```
 
-- `PASS`: no se han encontrado bloqueos conocidos; no garantiza exportación ni compilación.
-- `WARNING`: hay cuestiones que requieren revisión.
-- `FAIL`: se ha encontrado un bloqueo o el proyecto no es válido.
+The important part is that next2apk should tell you **why** your project
+can or cannot become a self-contained Android application.
 
-`STATIC` propone assets locales. `HYBRID` requiere un backend externo y puede exigir extraer las API Routes. `REMOTE` requiere desplegar Next.js o refactorizar las funciones de servidor. En un proyecto inválido, la estrategia no es utilizable: hay que resolver primero los errores del informe.
+Before touching anything.
 
-El analyzer detecta versión declarada de Next.js, App/Pages Router (incluido `src/`), TypeScript, config, package manager, nombres de variables de entorno, API Routes, Route Handlers, Server Actions, middleware/proxy, Supabase y dependencias que necesitan revisión. No ejecuta código del proyecto. No devuelve valores de entorno.
+Because tools that rewrite your project first and explain themselves
+later deserve jail.
 
-Los Server Components pueden generarse estáticamente. Los GET Route Handlers se marcan para revisión; los métodos que necesitan backend bloquean la exportación. Las rutas dinámicas requieren verificar sus parámetros estáticos. Un archivo de configuración existente siempre requiere revisión porque no se evalúa.
+------------------------------------------------------------------------
 
-Limitaciones: análisis sintáctico conservador sin resolución completa de imports, dependencias o ejecución. No interpreta configuraciones dinámicas ni demuestra qué código se ejecutará. Puede detectar uso de servidor en archivos no alcanzables. No resuelve completamente monorepos ni extensiones personalizadas de páginas. Las fixtures son muestras mínimas para el scanner, no aplicaciones certificadas mediante un build Next.js. La comprobación definitiva será una exportación real en el incremento de build.
+## Why not just use Capacitor?
 
-## Doctor
+You absolutely can.
 
-Comprueba Node, npm/pnpm/yarn, Java, directorios del Android SDK, Gradle wrapper/global y paquetes Capacitor accesibles desde el directorio actual. Las herramientas alternativas o pendientes de inicialización producen advertencias; Java/SDK ausentes producen errores. Es un diagnóstico inicial de disponibilidad: todavía no valida la matriz de versiones, licencias SDK ni ejecuta el wrapper del proyecto.
+Capacitor is excellent.
 
-Códigos de salida: `0` análisis sin errores (puede tener advertencias), `1` error de análisis/ejecución o requisito esencial de doctor ausente, `2` comando de una fase pendiente.
+next2apk isn't trying to replace it.
 
-## Arquitectura y API
+The annoying part is everything around it:
 
-```text
-src/
-  analyzer/       # Detección, reglas y contrato serializable
-  cli/            # Argumentos, presentación y códigos de salida
-  doctor/         # Diagnóstico del entorno
-  index.ts        # API pública sin efectos de CLI
-tests/
-fixtures/
-  static-next/
-  supabase-next/
-  server-actions-next/
-  api-routes-next/
+``` text
+Is this Next.js app statically exportable?
+Does it use Server Actions?
+What happens to API Routes?
+Where does the backend live?
+Which env vars are safe?
+What should webDir be?
+Is Android configured?
+Where the fuck is ANDROID_HOME?
+Why is Gradle angry?
+Why is Java angry?
+Why am I angry?
 ```
 
-```ts
-import { analyzeProject } from 'next2apk';
-const report = await analyzeProject('/ruta/al/proyecto');
-console.log(report.compatibility, report.strategy, report.issues);
+next2apk aims to sit between:
+
+``` text
+“I have a Next.js project”
 ```
 
-Consulta [ARCHITECTURE.md](ARCHITECTURE.md) para decisiones, riesgos y próximos incrementos: configuración segura de Capacitor con backups, recursos Android, build con Gradle y copia del APK a `dist/android/`. AAB, signing, Google Play, iOS, Tauri, GUI, CI/CD y análisis asistido por IA se incorporarán mediante módulos independientes.
+and:
 
-## Contribuir
+``` text
+“I have an Android app”
+```
 
-Antes de enviar cambios: `npm run typecheck`, `npm test` y `npm run build`. Añade una fixture o una prueba cuando cambies una regla de compatibilidad. Ninguna regla debe prometer que código dependiente de servidor puede ejecutarse dentro de un APK estático.
+while keeping the number of Stack Overflow tabs below medically
+concerning levels.
 
-Licencia MIT.
+------------------------------------------------------------------------
+
+# We need contributors
+
+This project is intentionally being built in small increments.
+
+That means **right now is actually a useful time to contribute**.
+
+Not when there are 80,000 lines of code, three abandoned rewrites and an
+issue from 2027 saying:
+
+> "Is this project still maintained?"
+
+If you know any of this stuff:
+
+-   Next.js internals
+-   static export
+-   Capacitor
+-   Android
+-   Gradle
+-   Java/Kotlin
+-   AST analysis
+-   package managers
+-   CLI design
+-   testing
+-   CI/CD
+-   ways developers create cursed Next.js architectures we haven't
+    detected yet
+
+...come break things.
+
+Then preferably fix them.
+
+------------------------------------------------------------------------
+
+## How to contribute without starting a civil war
+
+1.  Fork the repo.
+2.  Create a branch.
+3.  Make one understandable change.
+4.  Add tests when it makes sense.
+5.  Don't format the entire codebase because your editor felt creative.
+6.  Open a PR.
+7.  Explain what you changed like you're talking to another human being.
+
+``` bash
+git checkout -b feat/your-actually-useful-thing
+```
+
+Commit messages such as:
+
+``` text
+feat: add pnpm detection
+fix: detect route handlers in nested app routes
+test: add server action fixture
+```
+
+are appreciated.
+
+Commit messages such as:
+
+``` text
+stuff
+fix
+final
+final-final
+final-final-2
+asdfgh
+```
+
+will cause mild emotional damage.
+
+------------------------------------------------------------------------
+
+## Found a bug?
+
+Good.
+
+Seriously.
+
+Open an issue and include:
+
+``` text
+OS:
+Node version:
+Next.js version:
+Package manager:
+Command:
+Expected:
+Actual:
+Relevant project structure:
+```
+
+If possible, provide a minimal reproduction.
+
+If your bug report is:
+
+> "doesn't work"
+
+we will perform an ancient debugging ritual consisting of staring at the
+issue until additional information materializes.
+
+Results may vary.
+
+------------------------------------------------------------------------
+
+## Want to add a feature?
+
+Open an issue first for large changes.
+
+The north star is simple:
+
+> **Turn a Next.js project into an Android app with the least possible
+> bullshit.**
+
+A feature probably belongs here if it makes that journey:
+
+-   safer
+-   clearer
+-   faster
+-   more automatic
+-   less dependent on Android Studio
+-   less likely to make someone throw their laptop through a window
+
+------------------------------------------------------------------------
+
+## Architecture principle
+
+The CLI is just an interface.
+
+Core functionality should remain reusable so we can eventually have:
+
+``` text
+CLI
+ │
+ ├── Project Analyzer
+ ├── Compatibility Engine
+ ├── Capacitor Adapter
+ ├── Android Builder
+ └── Artifact Manager
+        │
+        ├── APK
+        └── AAB
+
+Later:
+
+Desktop GUI ───────────────┘
+CI/CD ────────────────────┘
+Your ridiculous idea ─────┘
+```
+
+Please don't bury important logic inside CLI prompts.
+
+Future us already has enough problems.
+
+------------------------------------------------------------------------
+
+## Roadmap
+
+``` text
+[██████████] Analyzer
+[██████████] Doctor
+[░░░░░░░░░░] Init + Capacitor
+[░░░░░░░░░░] Android build
+[░░░░░░░░░░] APK output
+[░░░░░░░░░░] Signing
+[░░░░░░░░░░] AAB
+[░░░░░░░░░░] GUI
+[░░░░░░░░░░] One-click mode
+```
+
+Ultimate goal:
+
+``` bash
+npx next2apk
+```
+
+followed by suspiciously little drama.
+
+------------------------------------------------------------------------
+
+# ⭐ About that star
+
+Look.
+
+GitHub stars don't pay the bills.
+
+They don't compile Gradle.
+
+They don't fix dependency conflicts.
+
+They don't even make `ANDROID_HOME` configure itself.
+
+But they make a tiny number go up, and apparently that's enough dopamine
+to maintain open-source software at 2:13 in the morning.
+
+So if you:
+
+-   like the idea,
+-   want to use it someday,
+-   enjoy watching developers fight build systems,
+-   arrived here accidentally,
+-   or have simply read this far and now feel trapped...
+
+**hit the damn ⭐ button.**
+
+It costs nothing.
+
+I checked.
+
+And if you don't star it after next2apk eventually saves you three hours
+of Android configuration...
+
+``` text
+next2apk remembers.
+```
+
+Probably.
+
+We haven't implemented telemetry.
+
+**And we're not going to.**
+
+------------------------------------------------------------------------
+
+## License
+
+MIT.
+
+Use it. Fork it. Improve it. Build weird things with it.
+
+Just don't sell a \$499 course called:
+
+> **"My secret system for converting Next.js to Android"**
+
+three days after cloning the repo.
+
+Or do.
+
+But at least leave the fucking star.
+
+------------------------------------------------------------------------
+
+::: {align="center"}
+### Next.js → next2apk → Android
+
+**Less configuration. Fewer rituals. More APK.**
+
+⭐ **Star it before Gradle notices we're having fun.** ⭐
+:::

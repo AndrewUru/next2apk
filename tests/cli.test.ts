@@ -21,7 +21,7 @@ test('CLI returns nonzero for blockers and invalid arguments', () => {
   assert.equal(run(['analyze', '--unknown']).status, 1);
 });
 test('pending phases do not claim successful conversion', () => {
-  for (const command of ['init', 'build']) {
+  for (const command of ['build']) {
     const result = run([command, fixture]);
     assert.equal(result.status, 2); assert.match(result.stderr, /not implemented/); assert.equal(result.stdout, '');
   }

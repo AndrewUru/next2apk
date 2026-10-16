@@ -10,10 +10,10 @@ export function selectPackageManager(detected: string, selected?: string): Packa
   if (selected && detected !== 'unknown' && detected !== selected) throw new Error(`Selected package manager ${selected} conflicts with detected ${detected}. Resolve project metadata first.`);
   return value as PackageManager;
 }
-export function installCommands(manager: PackageManager): ProcessCommand[] {
+export function installCommands(manager: PackageManager, needsTypescript = true): ProcessCommand[] {
   return [
     { command: manager, args: [manager === 'npm' ? 'install' : 'add', `@capacitor/core@${CAPACITOR_VERSION}`, `@capacitor/android@${CAPACITOR_VERSION}`] },
-    { command: manager, args: [manager === 'npm' ? 'install' : 'add', '-D', `@capacitor/cli@${CAPACITOR_VERSION}`, 'typescript@^5.9.3'] },
+    { command: manager, args: [manager === 'npm' ? 'install' : 'add', '-D', `@capacitor/cli@${CAPACITOR_VERSION}`, ...(needsTypescript ? ['typescript@5.9.3'] : [])] },
   ];
 }
 export function binaryCommand(manager: PackageManager, binary: 'next' | 'cap', args: string[]): ProcessCommand {

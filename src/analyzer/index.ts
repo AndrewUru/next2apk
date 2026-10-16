@@ -3,7 +3,7 @@ import path from 'node:path';
 import ts from 'typescript';
 import type { AnalysisReport, Issue, Severity } from './types.js';
 
-const excluded = new Set(['node_modules', '.git', '.next', 'out', 'dist', 'coverage', 'android', 'ios', '.turbo']);
+const excluded = new Set(['node_modules', '.git', '.next', '.next2apk', 'out', 'dist', 'coverage', 'android', 'ios', '.turbo']);
 const sourcePattern = /\.(?:[cm]?[jt]sx?)$/;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 

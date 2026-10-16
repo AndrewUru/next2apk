@@ -36,7 +36,7 @@ export async function doctor(root = process.cwd()): Promise<DoctorCheck[]> {
   const require = createRequire(path.join(path.resolve(root), 'package.json'));
   for (const name of ['@capacitor/core', '@capacitor/cli', '@capacitor/android']) {
     try { require.resolve(`${name}/package.json`); checks.push({ name, status: 'PASS', detail: 'Installed in project resolution path.' }); }
-    catch { checks.push({ name, status: 'WARNING', detail: 'Not installed. A future init increment will install compatible Capacitor packages.' }); }
+    catch { checks.push({ name, status: 'WARNING', detail: 'Not installed. Run next2apk init to install compatible Capacitor packages.' }); }
   }
   return checks;
 }

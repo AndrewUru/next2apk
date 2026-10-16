@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promis
 import path from 'node:path';
 import os from 'node:os';
 import { initializeProject, planInit, detectCapacitor, validateAppId, generateConfig, type ProcessRunner, type InitState } from '../src/index.js';
-import { selectPackageManager, binaryCommand } from '../src/capacitor/installer.js';
+import { selectPackageManager, binaryCommand, installCommands, CAPACITOR_VERSION } from '../src/capacitor/installer.js';
 import { prepareNextConfig } from '../src/project/next-config.js';
 import { snapshot } from '../src/project/files.js';
 
@@ -188,7 +188,7 @@ test('preexisting lock prevents concurrent initialization without changes', asyn
   });
 });
 
-const devInstall = (plan: Awaited<ReturnType<typeof planInit>>) => plan.commands.find(c => c.process.args.includes('-D'))?.process.args ?? [];
+const devInstall = (plan: Awaited<ReturnType<typeof planInit>>) => plan.commands.filter(c => c.process.args.includes('-D')).flatMap(c => c.process.args);
 const tsFiles = { 'tsconfig.json': '{}' };
 test('TypeScript project without React types installs them matching the React major', async () => {
   await project({ ...tsFiles, 'package.json': JSON.stringify({ dependencies: { next: '16.x', react: '^19.1.0' }, packageManager: 'npm@11.12.1' }) }, async root => {
@@ -217,4 +217,16 @@ test('REMOTE strategy runs no Next build and does not get React types', async ()
     assert.ok(!plan.commands.some(c => c.step === 'assets'));
     assert.ok(!devInstall(plan).some(a => a.startsWith('@types/react')));
   });
+});
+
+for (const manager of ['npm', 'pnpm', 'yarn'] as const) test(`${manager} pins Capacitor and TypeScript exactly but leaves supporting types as a range`, () => {
+  const [runtime, dev, types] = installCommands(manager, true, ['@types/react@19']);
+  for (const command of [runtime, dev]) assert.ok(command?.args.includes('-E'), `${manager} exact flag`);
+  assert.ok(runtime?.args.includes(`@capacitor/core@${CAPACITOR_VERSION}`) && runtime.args.includes(`@capacitor/android@${CAPACITOR_VERSION}`));
+  assert.ok(dev?.args.includes(`@capacitor/cli@${CAPACITOR_VERSION}`) && dev.args.includes('typescript@5.9.3'));
+  assert.deepEqual(types?.args.filter(a => !['install', 'add'].includes(a)), ['-D', '@types/react@19']);
+  assert.equal(installCommands(manager, false).length, 2, 'no supporting-types command when none is needed');
+});
+test('every install argument passes the process runner safety check', () => {
+  for (const manager of ['npm', 'pnpm', 'yarn'] as const) for (const command of installCommands(manager, true, ['@types/react@19'])) for (const arg of command.args) assert.match(arg, /^[A-Za-z0-9@/._^=-]+$/);
 });

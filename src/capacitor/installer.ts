@@ -10,10 +10,14 @@ export function selectPackageManager(detected: string, selected?: string): Packa
   if (selected && detected !== 'unknown' && detected !== selected) throw new Error(`Selected package manager ${selected} conflicts with detected ${detected}. Resolve project metadata first.`);
   return value as PackageManager;
 }
+// -E (--save-exact) is understood by npm, pnpm and yarn: Capacitor packages must stay on the tested version.
 export function installCommands(manager: PackageManager, needsTypescript = true, extraDevPackages: string[] = []): ProcessCommand[] {
+  const add = manager === 'npm' ? 'install' : 'add';
   return [
-    { command: manager, args: [manager === 'npm' ? 'install' : 'add', `@capacitor/core@${CAPACITOR_VERSION}`, `@capacitor/android@${CAPACITOR_VERSION}`] },
-    { command: manager, args: [manager === 'npm' ? 'install' : 'add', '-D', `@capacitor/cli@${CAPACITOR_VERSION}`, ...(needsTypescript ? ['typescript@5.9.3'] : []), ...extraDevPackages] },
+    { command: manager, args: [add, `@capacitor/core@${CAPACITOR_VERSION}`, `@capacitor/android@${CAPACITOR_VERSION}`, '-E'] },
+    { command: manager, args: [add, '-D', `@capacitor/cli@${CAPACITOR_VERSION}`, ...(needsTypescript ? ['typescript@5.9.3'] : []), '-E'] },
+    // Supporting types keep a compatible range instead of an exact pin.
+    ...(extraDevPackages.length ? [{ command: manager, args: [add, '-D', ...extraDevPackages] }] : []),
   ];
 }
 export function binaryCommand(manager: PackageManager, binary: 'next' | 'cap', args: string[]): ProcessCommand {

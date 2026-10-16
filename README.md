@@ -242,7 +242,7 @@ Each run records `.next2apk/state.json` with version, date, strategy, configurat
 
 On failure the original tool output remains visible and the error identifies the step. Partial changes and backups remain for inspection; there is no automatic rollback. Package lifecycle scripts and Next build execute project code, so their arbitrary external effects are outside the backup guarantee. Workspace roots and symlinked project files are not supported in this increment.
 
-Capacitor core, CLI and Android are pinned to **8.5.3**, requiring Node >=22. TypeScript is added only if absent. Tests inject process runners and need no SDK. Successful init does not certify APK compilation: build validates the environment separately.
+Capacitor core, CLI and Android are installed with an exact version (`--save-exact`) of **8.5.3**, requiring Node >=22, so a later `npm install` cannot drift to an untested release. TypeScript is added (also exact) only if absent. In TypeScript projects that declare `react` but not `@types/react`, init also adds `@types/react` at React's major version, as a range, because Next.js only installs it by itself outside CI. Tests inject process runners and need no SDK. Successful init does not certify APK compilation: build validates the environment separately.
 
 Public APIs: `planInit(path, options)`, `initializeProject(path, options, {run, log})`, `validateAppId()` and `generateConfig()`. See [ARCHITECTURE.md](ARCHITECTURE.md) for module boundaries and limitations.
 
